@@ -108,3 +108,57 @@ def test_rsvp_to_public_event(auth_token):
     data = rsvp_response.json()
     assert data["event_id"] == event_id
     assert data["attending"] is True
+
+
+# ---------------------------------------------------------------------------
+# Fehlerfälle / Randfälle
+# ---------------------------------------------------------------------------
+
+def test_duplicate_registration_returns_400():
+    """Dieselben Zugangsdaten zweimal registrieren — die zweite Anfrage schlägt fehl."""
+    username = f"dup_{int(time.time() * 1000)}"
+    payload = {"username": username, "password": "Sicher123"}
+
+    first = requests.post(f"{BASE_URL}/api/auth/register", json=payload)
+    assert first.status_code == 201
+
+    second = requests.post(f"{BASE_URL}/api/auth/register", json=payload)
+    assert second.status_code == 400
+    assert "error" in second.json()
+
+
+def test_rsvp_to_private_event_without_token_is_rejected(auth_token):
+    """RSVP für eine nicht-öffentliche Veranstaltung ohne Authentifizierung → 401."""
+    event_response = requests.post(
+        f"{BASE_URL}/api/events",
+        json={"title": "Privat-Event", "date": "2026-12-20T19:00:00", "is_public": False},
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+    assert event_response.status_code == 201
+    event_id = event_response.json()["id"]
+
+    rsvp_response = requests.post(
+        f"{BASE_URL}/api/rsvps/event/{event_id}",
+        json={"attending": True}
+        # kein Authorization-Header
+    )
+
+    assert rsvp_response.status_code == 401
+    assert "error" in rsvp_response.json()
+
+
+def test_login_with_wrong_password_returns_401():
+    """Anmeldung mit falschem Passwort wird abgelehnt."""
+    username = f"wrongpw_{int(time.time() * 1000)}"
+    requests.post(f"{BASE_URL}/api/auth/register", json={
+        "username": username,
+        "password": "KorrektesPasswort"
+    })
+
+    response = requests.post(f"{BASE_URL}/api/auth/login", json={
+        "username": username,
+        "password": "FalschesPasswort"
+    })
+
+    assert response.status_code == 401
+    assert "error" in response.json()
