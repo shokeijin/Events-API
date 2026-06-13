@@ -15,3 +15,27 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: docker build -t events-api:latest .
+
+      - name: Start container
+        run: docker run -d -p 5000:5000 --name events-api events-api:latest
+
+      - name: Wait for app to start
+        run: |
+          for i in $(seq 1 15); do
+            curl -sf http://localhost:5000/api/health && exit 0
+            echo "Waiting... ($i/15)"
+            sleep 2
+          done
+          echo "App did not start in time" && exit 1
+
+      - name: Health check
+        run: |
+          response=$(curl -sf http://localhost:5000/api/health)
+          echo "$response"
+          echo "$response" | grep -q '"healthy"'
